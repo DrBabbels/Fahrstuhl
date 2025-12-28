@@ -1,0 +1,291 @@
+import { useState } from "react";
+
+/* ================= CONSTANTS ================= */
+
+const CARD_POINTS = {
+  "7": 5,
+  "8": 5,
+  "9": 4,
+  "10": 4,
+  Jack: 3,
+  Queen: 3,
+  King: 2,
+  Ass: 1,
+};
+
+const CARD_ORDER = ["7", "8", "9", "10", "Jack", "Queen", "King", "Ass"];
+
+const ROUNDS = Array.from({ length: 20 }, (_, i) => {
+  if (i < 10) return i + 1;
+  if (i === 10) return 10;
+  return 20 - i;
+});
+
+/* ================= SUMMARY COMPONENT ================= */
+
+function Summary({ players, data, totalScore }) {
+  const stats = players.map(p => {
+    let zeroBids = 0;
+    let zeroSuccess = 0;
+    let perfectRounds = 0;
+
+    Object.values(data).forEach(r => {
+      const e = r[p];
+      if (!e) return;
+
+      if (e.guessed === 0) {
+        zeroBids++;
+        if (e.got === 0) zeroSuccess++;
+      }
+
+      if (e.guessed === e.got) perfectRounds++;
+    });
+
+    return {
+      player: p,
+      score: totalScore(p),
+      zeroBids,
+      zeroSuccess,
+      perfectRounds,
+    };
+  });
+
+  const winner = [...stats].sort((a, b) => b.score - a.score)[0];
+
+  return (
+    <div className="border p-3 space-y-2">
+      <h2 className="font-bold text-lg">Game Summary</h2>
+      <div className="font-semibold">
+        Winner: {winner.player} ({winner.score} pts)
+      </div>
+      <table className="border-collapse border text-sm w-full">
+        <thead>
+          <tr>
+            <th className="border p-1">Player</th>
+            <th className="border p-1">Score</th>
+            <th className="border p-1">Perfect Rounds</th>
+            <th className="border p-1">0 Bids</th>
+            <th className="border p-1">0 Success</th>
+          </tr>
+        </thead>
+        <tbody>
+          {stats.map(s => (
+            <tr key={s.player}>
+              <td className="border p-1">{s.player}</td>
+              <td className="border p-1">{s.score}</td>
+              <td className="border p-1">{s.perfectRounds}</td>
+              <td className="border p-1">{s.zeroBids}</td>
+              <td className="border p-1">{s.zeroSuccess}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ================= MAIN COMPONENT ================= */
+
+export default function CardGameTracker() {
+  const [players, setPlayers] = useState(["Player 1", "Player 2"]);
+  const [data, setData] = useState({});
+
+  const updateEntry = (round, player, patch) => {
+    setData(prev => ({
+      ...prev,
+      [round]: {
+        ...prev[round],
+        [player]: {
+          guessed: 0,
+          got: 0,
+          cards: [],
+          ...prev[round]?.[player],
+          ...patch,
+        },
+      },
+    }));
+  };
+
+  const calcScore = (entry) => {
+    if (!entry) return 0;
+    const guessed = Number(entry.guessed);
+    const got = Number(entry.got);
+
+    if (guessed === got) {
+      return 10 + entry.cards.reduce((s, c) => s + CARD_POINTS[c], 0);
+    }
+
+    return -2 * Math.abs(guessed - got);
+  };
+
+  const totalScore = (player) =>
+    Object.values(data).reduce((s, r) => s + calcScore(r[player]), 0);
+
+  return (
+    <div className="p-4 space-y-4 max-w-full overflow-x-auto">
+      <h1 className="text-2xl font-bold">Card Game Tracker</h1>
+
+      <div className="flex flex-wrap gap-2 items-center">
+        {players.map((p, i) => (
+          <input
+            key={i}
+            className="border p-1 w-32"
+            value={p}
+            onChange={e => {
+              const copy = [...players];
+              copy[i] = e.target.value;
+              setPlayers(copy);
+            }}
+          />
+        ))}
+        {players.length < 6 && (
+          <button
+            className="border px-2"
+            onClick={() => setPlayers([...players, `Player ${players.length + 1}`])}
+          >
+            + Player
+          </button>
+        )}
+        {players.length > 2 && (
+          <button
+            className="border px-2"
+            onClick={() => setPlayers(players.slice(0, -1))}
+          >
+            − Player
+          </button>
+        )}
+      </div>
+
+      <table className="border-collapse border text-xs md:text-sm w-full">
+        <thead>
+          <tr>
+            <th className="border p-1">Round</th>
+            {players.map(p => (
+              <th key={p} className="border p-1">{p}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {ROUNDS.map((cardsInRound, rIndex) => (
+            <tr key={rIndex}>
+              <td className="border p-1 whitespace-nowrap">
+                R {rIndex + 1} ({cardsInRound})
+              </td>
+              {players.map(p => {
+                const entry = data[rIndex]?.[p] || { guessed: 0, got: 0, cards: [] };
+                const success = entry.guessed === entry.got;
+
+                return (
+                  <td
+                    key={p}
+                    className={`border p-1 space-y-1 min-w-[140px] ${
+                      success
+                        ? "bg-green-100"
+                        : entry.guessed !== 0 || entry.got !== 0
+                        ? "bg-red-100"
+                        : ""
+                    }`}
+                  >
+                    <div className="flex gap-1">
+                      <input
+                        type="number"
+                        min={0}
+                        max={cardsInRound}
+                        className="border p-1 w-1/2"
+                        value={entry.guessed}
+                        onChange={e =>
+                          updateEntry(rIndex, p, { guessed: Number(e.target.value) })
+                        }
+                      />
+                      <span className="text-gray-500">guessed</span>
+                    </div>
+
+                    <div className="flex gap-1">
+                      <input
+                        type="number"
+                        min={0}
+                        max={cardsInRound}
+                        className="border p-1 w-1/2"
+                        value={entry.got}
+                        onChange={e => {
+                          const got = Number(e.target.value);
+                          updateEntry(rIndex, p, {
+                            got,
+                            cards:
+                              got === 0
+                                ? []
+                                : entry.cards
+                                    .slice(0, got)
+                                    .concat(
+                                      Array(Math.max(0, got - entry.cards.length)).fill("7")
+                                    ),
+                          });
+                        }}
+                      />
+                      <span className="text-gray-500">got</span>
+                    </div>
+
+                    {entry.got > 0 && (
+                      <div className="space-y-1">
+                        {entry.cards.map((c, i) => (
+                          <select
+                            key={i}
+                            className="border p-1 w-full"
+                            value={c}
+                            onChange={e => {
+                              const cards = [...entry.cards];
+                              cards[i] = e.target.value;
+                              updateEntry(rIndex, p, { cards });
+                            }}
+                          >
+                            {CARD_ORDER.map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="text-right font-semibold">
+                      {calcScore(entry)} pts
+                    </div>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td className="border p-1 font-bold">Total</td>
+            {players.map(p => (
+              <td key={p} className="border p-1 font-bold text-right">
+                {totalScore(p)}
+              </td>
+            ))}
+          </tr>
+        </tfoot>
+      </table>
+
+      <Summary players={players} data={data} totalScore={totalScore} />
+    </div>
+  );
+}
+
+/* ================= BASIC TEST SCENARIOS (MANUAL) =================
+
+1. Guess 0 / Got 0
+   - No card dropdowns shown
+   - Round counts as perfect
+   - +10 points awarded
+
+2. Guess 3 / Got 3 with Queen, King, Ass
+   - Score = 10 + 3 + 2 + 1 = 16
+
+3. Guess 2 / Got 4
+   - Score = -4
+
+4. Reduce 'got' value
+   - Extra card selectors are removed safely
+
+=================================================== */
